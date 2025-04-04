@@ -1,3 +1,77 @@
+# 微信读书 MCP 服务器
+
+微信读书MCP服务器是一个桥接微信读书数据和Claude Desktop的轻量级服务器，使您可以在Claude中无缝访问微信读书的笔记和阅读数据。
+
+## 安装和使用
+
+### 环境准备
+
+1. 确保您的系统已安装 Node.js (v16+)
+2. 克隆本仓库：`git clone https://github.com/yourusername/mcp-server-weread.git`
+3. 进入项目目录：`cd mcp-server-weread`
+4. 安装依赖：`npm install`
+
+### 获取微信读书Cookie
+
+1. 在浏览器中登录微信读书网页版: https://weread.qq.com/
+2. 打开浏览器开发者工具（F12或右键检查）
+3. 切换到"应用程序"或"Application"标签
+4. 在左侧"存储"下找到"Cookies"
+5. 选择"https://weread.qq.com"
+6. 找到并复制所有cookie（可以全选然后复制所有值）
+
+### 配置环境变量
+
+1. 在项目根目录下，编辑`.env`文件
+2. 设置微信读书Cookie：`WEREAD_COOKIE=你复制的cookie值`
+
+### 启动服务器
+
+1. 编译代码：`npm run build`
+2. 启动服务器：`node build/index.js`
+
+### 在MCP客户端中配置
+
+以Cursor AI为例，在`~/.cursor/mcp.json`文件中添加：
+
+```json
+{
+  "mcpServers": {
+    "mcp-server-weread": {
+      "command": "node",
+      "args": ["/path/to/mcp-server-weread/build/index.js"],
+      "env": {
+        "WEREAD_COOKIE": "你的微信读书cookie"
+      }
+    }
+  }
+}
+```
+
+替换`/path/to/mcp-server-weread`为实际安装路径，并设置正确的cookie值。
+
+## 支持的功能
+
+服务器提供以下工具：
+
+1. **get_bookshelf** - 获取用户的完整书架信息
+2. **get_notebooks** - 获取带有笔记的书籍列表
+3. **get_book_notes** - 获取特定书籍的所有笔记内容
+4. **get_book_info** - 获取书籍的详细信息
+5. **search_notes** - 搜索所有笔记中包含特定关键词的内容
+6. **get_recent_reads** - 获取用户最近阅读的书籍和相关数据
+
+## 使用示例
+
+在支持MCP的AI客户端（如Claude Desktop）中，您可以：
+
+1. 请求："帮我查看我的书架上有哪些书"
+2. 请求："我想看看《思考，快与慢》这本书的笔记"
+3. 请求："帮我找一下我笔记中关于'认知偏差'的内容"
+4. 请求："获取我最近读过的书籍"
+
+---
+
 # 微信读书 MCP 服务器设计方案
 
 ## 产品定位与目标
