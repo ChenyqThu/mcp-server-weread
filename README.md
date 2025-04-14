@@ -23,7 +23,7 @@
 ```
 +---------------+      +-----------------+      +------------------+
 |               |      |                 |      |                  |
-| 微信读书服务器 | <--> | WeRead MCP 服务器 | <--> | Claude Desktop |
+| 微信读书服务器 | <-->  | WeRead MCP 服务器 | <--> | Claude Desktop |
 |               |      |                 |      |                  |
 +---------------+      +-----------------+      +------------------+
 ```
@@ -83,293 +83,46 @@
 
 ### 1. 获取书架工具 (get_bookshelf)
 
-**功能**: 获取用户的完整书架信息
-
-**参数**: 无
-
-**返回**: 格式化的书籍列表，包括书名、作者等基本信息
-
-**实现逻辑**:
-```python
-def get_bookshelf():
-    """获取用户的完整书架信息"""
-    # 直接调用WeReadApi中的get_bookshelf方法
-    weread_api = WeReadApi()
-    bookshelf_data = weread_api.get_bookshelf()
-    
-    # 处理返回数据，提取有用信息
-    books = []
-    if "books" in bookshelf_data:
-        for book in bookshelf_data["books"]:
-            books.append({
-                "bookId": book.get("bookId", ""),
-                "title": book.get("title", ""),
-                "author": book.get("author", ""),
-                "cover": book.get("cover", ""),
-                "category": book.get("category", ""),
-                "finished": book.get("finished", False),
-                "updateTime": book.get("updateTime", 0)
-            })
-    
-    return {"books": books}
-```
-
 ### 2. 获取笔记本列表工具 (get_notebooks)
-
-**功能**: 获取所有带有笔记的书籍列表
-
-**参数**: 无
-
-**返回**: 带有笔记的书籍列表，按排序顺序
-
-**实现逻辑**:
-```python
-def get_notebooks():
-    """获取所有带有笔记的书籍列表"""
-    # 直接调用WeReadApi中的get_notebooklist方法
-    weread_api = WeReadApi()
-    notebooks = weread_api.get_notebooklist()
-    
-    # 处理返回数据，提取有用信息
-    formatted_notebooks = []
-    for notebook in notebooks:
-        formatted_notebooks.append({
-            "bookId": notebook.get("bookId", ""),
-            "title": notebook.get("title", ""),
-            "author": notebook.get("author", ""),
-            "cover": notebook.get("cover", ""),
-            "noteCount": notebook.get("noteCount", 0),
-            "sort": notebook.get("sort", 0),
-            "bookUrl": weread_api.get_url(notebook.get("bookId", ""))
-        })
-    
-    return {"notebooks": formatted_notebooks}
-```
 
 ### 3. 获取书籍笔记工具 (get_book_notes)
 
-**功能**: 获取特定书籍的所有笔记内容
-
-**参数**: bookId (字符串) - 书籍ID
-
-**返回**: 按章节组织的笔记内容，包括划线和评论
-
-**实现逻辑**:
-```python
-def get_book_notes(bookId):
-    """获取特定书籍的所有笔记内容"""
-    weread_api = WeReadApi()
-    
-    # 1. 获取章节信息
-    chapter_info = weread_api.get_chapter_info(bookId)
-    
-    # 2. 获取划线(书签)
-    bookmarks = weread_api.get_bookmark_list(bookId) or []
-    
-    # 3. 获取评论/感想
-    reviews = weread_api.get_review_list(bookId) or []
-    
-    # 4. 获取书籍基本信息
-    book_info = weread_api.get_bookinfo(bookId) or {}
-    
-    # 处理章节信息
-    chapters = {}
-    for uid, chapter in chapter_info.items():
-        chapters[uid] = {
-            "title": chapter.get("title", ""),
-            "level": chapter.get("level", 0),
-            "chapterIdx": chapter.get("chapterIdx", 0)
-        }
-    
-    # 处理划线和评论数据，按章节组织
-    organized_notes = {}
-    
-    # 添加划线
-    for bookmark in bookmarks:
-        chapter_uid = str(bookmark.get("chapterUid", ""))
-        if chapter_uid not in organized_notes:
-            organized_notes[chapter_uid] = {
-                "chapterTitle": chapters.get(chapter_uid, {}).get("title", "未知章节"),
-                "chapterLevel": chapters.get(chapter_uid, {}).get("level", 0),
-                "highlights": [],
-                "reviews": []
-            }
-        
-        organized_notes[chapter_uid]["highlights"].append({
-            "text": bookmark.get("markText", ""),
-            "createTime": bookmark.get("createTime", 0),
-            "style": bookmark.get("style", 0)
-        })
-    
-    # 添加评论
-    for review in reviews:
-        chapter_uid = str(review.get("chapterUid", ""))
-        if chapter_uid not in organized_notes:
-            organized_notes[chapter_uid] = {
-                "chapterTitle": chapters.get(chapter_uid, {}).get("title", "未知章节"),
-                "chapterLevel": chapters.get(chapter_uid, {}).get("level", 0),
-                "highlights": [],
-                "reviews": []
-            }
-        
-        organized_notes[chapter_uid]["reviews"].append({
-            "content": review.get("content", ""),
-            "createTime": review.get("createTime", 0),
-            "type": review.get("type", 0)
-        })
-    
-    # 组织最终返回数据
-    return {
-        "bookInfo": {
-            "bookId": bookId,
-            "title": book_info.get("title", ""),
-            "author": book_info.get("author", ""),
-            "cover": book_info.get("cover", ""),
-            "url": weread_api.get_url(bookId)
-        },
-        "notes": organized_notes
-    }
-```
-
 ### 4. 获取书籍详情工具 (get_book_info)
-
-**功能**: 获取书籍的详细信息
-
-**参数**: bookId (字符串) - 书籍ID
-
-**返回**: 书籍的详细信息，包括标题、作者、简介等
-
-**实现逻辑**:
-```python
-def get_book_info(bookId):
-    """获取书籍的详细信息"""
-    weread_api = WeReadApi()
-    book_info = weread_api.get_bookinfo(bookId)
-    
-    # 处理并返回整理后的书籍信息
-    formatted_info = {
-        "bookId": bookId,
-        "title": book_info.get("title", ""),
-        "author": book_info.get("author", ""),
-        "cover": book_info.get("cover", ""),
-        "intro": book_info.get("intro", ""),
-        "category": book_info.get("category", ""),
-        "publisher": book_info.get("publisher", ""),
-        "publishTime": book_info.get("publishTime", ""),
-        "isbn": book_info.get("isbn", ""),
-        "bookScore": book_info.get("newRating", {}).get("score", 0),
-        "url": weread_api.get_url(bookId)
-    }
-    
-    return formatted_info
-```
 
 ### 5. 搜索笔记工具 (search_notes)
 
-**功能**: 搜索所有笔记中包含特定关键词的内容
-
-**参数**: keyword (字符串) - 搜索关键词
-
-**返回**: 匹配关键词的笔记列表，包括来源书籍和内容
-
-**实现逻辑**:
-```python
-def search_notes(keyword):
-    """搜索所有笔记中包含特定关键词的内容"""
-    weread_api = WeReadApi()
-    
-    # 1. 获取所有有笔记的书籍
-    notebooks = weread_api.get_notebooklist()
-    
-    # 2. 遍历每本书的笔记，查找匹配关键词的内容
-    search_results = []
-    
-    for notebook in notebooks:
-        bookId = notebook.get("bookId", "")
-        book_title = notebook.get("title", "")
-        
-        # 获取划线
-        bookmarks = weread_api.get_bookmark_list(bookId) or []
-        # 获取评论
-        reviews = weread_api.get_review_list(bookId) or []
-        
-        # 搜索划线内容
-        for bookmark in bookmarks:
-            mark_text = bookmark.get("markText", "")
-            if keyword.lower() in mark_text.lower():
-                search_results.append({
-                    "bookId": bookId,
-                    "bookTitle": book_title,
-                    "chapterUid": bookmark.get("chapterUid", ""),
-                    "type": "highlight",
-                    "content": mark_text,
-                    "createTime": bookmark.get("createTime", 0)
-                })
-        
-        # 搜索评论内容
-        for review in reviews:
-            review_content = review.get("content", "")
-            if keyword.lower() in review_content.lower():
-                search_results.append({
-                    "bookId": bookId,
-                    "bookTitle": book_title,
-                    "chapterUid": review.get("chapterUid", ""),
-                    "type": "review",
-                    "content": review_content,
-                    "createTime": review.get("createTime", 0)
-                })
-    
-    # 按时间排序
-    search_results.sort(key=lambda x: x["createTime"], reverse=True)
-    
-    return {"results": search_results, "keyword": keyword, "count": len(search_results)}
-```
-
 ### 6. 最近阅读工具 (get_recent_reads)
 
-**功能**: 获取用户最近阅读的书籍和相关数据
-
-**参数**: 无
-
-**返回**: 最近阅读的书籍列表，包括阅读进度和时间信息
-
-**实现逻辑**:
-```python
-def get_recent_reads():
-    """获取用户最近阅读的书籍和相关数据"""
-    weread_api = WeReadApi()
-    
-    # 获取阅读历史数据
-    history_data = weread_api.get_api_data()
-    
-    # 提取并格式化最近阅读数据
-    recent_books = []
-    
-    if "recentBooks" in history_data:
-        for book in history_data["recentBooks"]:
-            # 获取每本书的阅读信息
-            read_info = weread_api.get_read_info(book["bookId"])
-            
-            recent_books.append({
-                "bookId": book.get("bookId", ""),
-                "title": book.get("title", ""),
-                "author": book.get("author", ""),
-                "cover": book.get("cover", ""),
-                "readingTime": read_info.get("readingTime", 0),  # 阅读时长(秒)
-                "progress": read_info.get("progress", 0),        # 阅读进度(%)
-                "lastReadingDate": read_info.get("lastReadingDate", 0),
-                "noteCount": read_info.get("noteCount", 0),
-                "url": weread_api.get_url(book.get("bookId", ""))
-            })
-    
-    return {"recentBooks": recent_books}
-```
 
 ## 技术实现注意事项
 
 1. **环境变量管理**
    - 使用.env文件或系统环境变量管理敏感信息(Cookie)
-   - 支持Cookie Cloud服务获取最新Cookie
+   - 支持 CookieCloud 服务获取最新 Cookie
+   
+   ### CookieCloud 配置说明
+   为了解决 Cookie 频繁过期，需要重新获取并更新环境变量的问题。本项目支持 [CookieCloud](https://github.com/easychen/CookieCloud) 服务来自动同步和更新 Cookie。CookieCloud 是一个开源的跨浏览器 Cookie 同步工具，支持自建服务器。
+
+   #### 配置步骤：
+   1. **安装浏览器插件**
+      - Edge商店：[CookieCloud for Edge](https://microsoftedge.microsoft.com/addons/detail/cookiecloud/bffenpfpjikaeocaihdonmgnjjdpjkeo)
+      - Chrome商店：[CookieCloud for Chrome](https://chromewebstore.google.com/detail/cookiecloud/ffjiejobkoibkjlhjnlgmcnnigeelbdl)
+
+   2. **配置 CookieCloud 插件**
+      - 服务器地址：使用默认服务器 `https://cookiecloud.malinkang.com` 或填入自建服务器地址
+      - 获取用户 ID 和密码
+      - 点击"手动同步"确保配置生效
+      - [可选] 如果需要插件自动保活，可以在保活中填入 `https://weread.qq.com`，插件会自动刷新 Cookie
+
+   3. **配置环境变量**
+      在项目根目录创建 `.env` 文件（参考 `.env.example`），添加以下配置：
+      ```
+      CC_URL=你的CookieCloud服务器地址
+      CC_ID=你的CookieCloud用户UUID
+      CC_PASSWORD=你的CookieCloud密码
+      ```
+
+   **注意**：配置 CookieCloud 后，系统会优先使用 CookieCloud 获取 Cookie，获取失败才会使用 `WEREAD_COOKIE` 环境变量的值。
 
 2. **错误处理**
    - 完善的异常处理机制，特别是API调用失败情况
