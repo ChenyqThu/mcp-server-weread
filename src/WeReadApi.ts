@@ -7,15 +7,14 @@ import { CacheManager, BookMark as CachedBookMark, Review as CachedReview, Noteb
 
 dotenv.config();
 
+// 更新API URL常量为refapi.md中的URL
 const WEREAD_URL = "https://weread.qq.com/";
-const WEREAD_NOTEBOOKS_URL = "https://i.weread.qq.com/user/notebooks";
-const WEREAD_BOOKMARKLIST_URL = "https://i.weread.qq.com/book/bookmarklist";
-const WEREAD_CHAPTER_INFO = "https://i.weread.qq.com/book/chapterInfos";
-const WEREAD_READ_INFO_URL = "https://i.weread.qq.com/book/readinfo";
-const WEREAD_REVIEW_LIST_URL = "https://i.weread.qq.com/review/list";
-const WEREAD_BOOK_INFO = "https://i.weread.qq.com/book/info";
-const WEREAD_READDATA_DETAIL = "https://i.weread.qq.com/readdata/detail";
-const WEREAD_HISTORY_URL = "https://i.weread.qq.com/readdata/summary?synckey=0";
+const WEREAD_NOTEBOOKS_URL = "https://weread.qq.com/api/user/notebook";
+const WEREAD_BOOK_INFO_URL = "https://weread.qq.com/api/book/info";
+const WEREAD_BOOKMARKLIST_URL = "https://weread.qq.com/web/book/bookmarklist";
+const WEREAD_CHAPTER_INFO_URL = "https://weread.qq.com/web/book/chapterInfos";
+const WEREAD_REVIEW_LIST_URL = "https://weread.qq.com/api/review/list";
+const WEREAD_READ_INFO_URL = "https://weread.qq.com/web/book/getProgress";
 
 interface ChapterInfo {
   chapterUid: number;
@@ -42,17 +41,50 @@ interface Review {
   type: number;
 }
 
+// 获取命令行参数
+interface CommandArgs {
+  WEREAD_COOKIE?: string;
+  CC_URL?: string; 
+  CC_ID?: string;
+  CC_PASSWORD?: string;
+}
+
 export class WeReadApi {
   private cookie: string = "";
   private axiosInstance: any;
   private initialized: boolean = false;
   public cacheManager: CacheManager;
+  private commandArgs: CommandArgs = {};
 
   constructor() {
     this.cacheManager = new CacheManager();
+    // 获取命令行参数
+    this.parseCommandArgs();
     this.initAsync().catch(error => {
       console.error("初始化WeReadApi失败:", error);
     });
+  }
+
+  // 解析命令行参数
+  private parseCommandArgs(): void {
+    try {
+      // 获取启动参数
+      const args = process.argv;
+      const argsIndex = args.findIndex(arg => arg === '--args');
+      
+      if (argsIndex !== -1 && argsIndex + 1 < args.length) {
+        try {
+          // 解析JSON格式的参数
+          const argsJson = args[argsIndex + 1];
+          this.commandArgs = JSON.parse(argsJson);
+          console.error("从命令行获取到的参数:", this.commandArgs);
+        } catch (error) {
+          console.error("解析命令行参数失败:", error);
+        }
+      }
+    } catch (error) {
+      console.error("处理命令行参数时出错:", error);
+    }
   }
 
   private async initAsync(): Promise<void> {
@@ -105,10 +137,6 @@ export class WeReadApi {
           if (cookieItems.length > 0) {
             return cookieItems.join("; ");
           }
-          
-          // 如果无法从Cookie Cloud获取有效数据，再尝试使用本地Cookie
-          console.error("无法从Cookie Cloud获取有效Cookie，尝试使用本地Cookie");
-          return process.env.WEREAD_COOKIE || "";
         }
       }
       console.warn("从Cookie Cloud获取数据成功，但未找到微信读书Cookie");
@@ -120,32 +148,64 @@ export class WeReadApi {
   }
 
   private async getCookie(): Promise<string> {
-    const url = process.env.CC_URL || "https://cookiecloud.malinkang.com/";
-    const id = process.env.CC_ID;
-    const password = process.env.CC_PASSWORD;
-    let cookie = process.env.WEREAD_COOKIE;
-
-    // 优先尝试从Cookie Cloud获取
-    if (url && id && password) {
+    // 优先级：
+    // 1. 命令行参数中的WEREAD_COOKIE
+    // 2. 命令行参数中的Cookie Cloud配置
+    // 3. 环境变量中的Cookie Cloud配置
+    // 4. 环境变量中的WEREAD_COOKIE
+    
+    let cookie: string | null = null;
+    
+    // 1. 检查命令行参数中的直接Cookie
+    if (this.commandArgs.WEREAD_COOKIE) {
+      console.error("使用命令行参数中提供的WEREAD_COOKIE");
+      return this.commandArgs.WEREAD_COOKIE;
+    }
+    
+    // 2. 检查命令行参数中的Cookie Cloud配置
+    if (this.commandArgs.CC_URL && this.commandArgs.CC_ID && this.commandArgs.CC_PASSWORD) {
       try {
-        console.error("正在尝试从Cookie Cloud获取Cookie...");
-        const cloudCookie = await this.tryGetCloudCookie(url, id, password);
-        if (cloudCookie) {
-          console.error("成功从Cookie Cloud获取Cookie");
-          return cloudCookie;
+        console.error("正在尝试使用命令行参数中的Cookie Cloud配置");
+        cookie = await this.tryGetCloudCookie(
+          this.commandArgs.CC_URL,
+          this.commandArgs.CC_ID,
+          this.commandArgs.CC_PASSWORD
+        );
+        if (cookie) {
+          console.error("成功使用命令行参数中的Cookie Cloud配置获取Cookie");
+          return cookie;
         }
       } catch (error) {
-        console.warn("从Cookie Cloud获取Cookie失败，将使用环境变量中的Cookie");
+        console.warn("使用命令行参数中的Cookie Cloud配置获取Cookie失败，尝试环境变量");
       }
     }
-
-    // 回退到环境变量中的Cookie
-    if (!cookie || !cookie.trim()) {
+    
+    // 3. 尝试环境变量中的Cookie Cloud配置
+    const envUrl = process.env.CC_URL;
+    const envId = process.env.CC_ID;
+    const envPassword = process.env.CC_PASSWORD;
+    
+    if (envUrl && envId && envPassword) {
+      try {
+        console.error("正在尝试使用环境变量中的Cookie Cloud配置");
+        cookie = await this.tryGetCloudCookie(envUrl, envId, envPassword);
+        if (cookie) {
+          console.error("成功使用环境变量中的Cookie Cloud配置获取Cookie");
+          return cookie;
+        }
+      } catch (error) {
+        console.warn("使用环境变量中的Cookie Cloud配置获取Cookie失败，尝试环境变量中的直接Cookie");
+      }
+    }
+    
+    // 4. 回退到环境变量中的直接Cookie
+    const envCookie = process.env.WEREAD_COOKIE;
+    if (!envCookie || !envCookie.trim()) {
       throw new Error("没有找到cookie，请按照文档填写cookie或配置Cookie Cloud");
     }
-
-    console.error("使用环境变量中的Cookie");
-    return cookie;
+    
+    console.error("使用环境变量中的WEREAD_COOKIE");
+    return envCookie;
   }
 
   private handleErrcode(errcode: number): void {
@@ -241,148 +301,125 @@ export class WeReadApi {
   ): Promise<T> {
     await this.ensureInitialized();
     
-    // 不再先访问主页
-    // await this.visitHomepage();
-    
     // 向所有GET请求添加时间戳避免缓存
     if (method === 'get') {
       params._ = new Date().getTime();
     }
     
-    const config: any = {
-      url,
-      method,
-      headers: this.getApiHeaders(),
-      timeout: 30000
-    };
-    
-    if (method === 'get' && Object.keys(params).length > 0) {
-      config.params = params;
+    try {
+      let response;
+      
+      if (method === 'get') {
+        response = await this.axiosInstance.get(url, { params });
+      } else {
+        response = await this.axiosInstance.post(url, data, { params });
+      }
+      
+      if (response.data.errcode !== undefined && response.data.errcode !== 0) {
+        this.handleErrcode(response.data.errcode);
+        throw new Error(`API返回错误: ${response.data.errmsg || 'Unknown error'} (code: ${response.data.errcode})`);
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      console.error(`API请求失败 (${url}):`, error.message);
+      throw error;
     }
-    
-    if (method === 'post' && data) {
-      config.data = data;
-    }
-    
-    const response = await axios(config);
-    
-    return response.data;
   }
 
+  // 获取书架信息（存在笔记的书籍）
   public async getBookshelf(): Promise<any> {
     await this.ensureInitialized();
     return this.retry(async () => {
       console.error("正在获取书架信息...");
       
-      // 使用统一的API请求方法
-      const data = await this.makeApiRequest<any>("https://i.weread.qq.com/shelf/sync", "get", {
-        synckey: 0,
-        teenmode: 0,
-        album: 1,
-        onlyBookid: 0
-      });
+      const data = await this.makeApiRequest<any>(WEREAD_NOTEBOOKS_URL, "get");
       
-      console.error("获取书架信息成功");
+      console.error(`获取书架信息成功，共有${data.books?.length || 0}本书`);
       return data;
     });
   }
 
-  /**
-   * 获取笔记本列表
-   */
+  // 获取笔记本列表
   public async getNotebooklist(): Promise<CachedNotebook[]> {
     await this.ensureInitialized();
     return this.retry(async () => {
       console.error("正在获取笔记本列表...");
       
-      // 使用synckey=0获取全部数据
-      const data = await this.makeApiRequest<any>(WEREAD_NOTEBOOKS_URL, "get", { synckey: 0 });
+      const data = await this.makeApiRequest<any>(WEREAD_NOTEBOOKS_URL, "get");
       
-      // 处理返回数据
       const books = data.books || [];
+      console.error(`获取笔记本列表成功，共有${books.length}本书`);
       
-      // 添加synckey到每个笔记本
-      books.forEach((book: any) => {
-        book.synckey = book.synckey || 0;
+      return books.map((item: any) => {
+        return {
+          bookId: item.bookId || "",
+          title: item.book?.title || "",
+          author: item.book?.author || "",
+          cover: item.book?.cover || "",
+          noteCount: item.noteCount || 0,
+          sort: item.sort || 0,
+          synckey: data.synckey || 0
+        };
       });
-      
-      books.sort((a: any, b: any) => a.sort - b.sort);
-      
-      console.error("获取笔记本列表成功，共有", books.length, "本书");
-      return books;
     });
   }
 
+  // 获取书籍信息
   public async getBookinfo(bookId: string): Promise<any> {
     await this.ensureInitialized();
     return this.retry(async () => {
       console.error(`正在获取书籍信息: ${bookId}`);
       
-      const data = await this.makeApiRequest<any>(WEREAD_BOOK_INFO, "get", { bookId });
+      const data = await this.makeApiRequest<any>(WEREAD_BOOK_INFO_URL, "get", { bookId });
       
       console.error(`获取书籍信息成功: ${data.title || bookId}`);
       return data;
     });
   }
 
+  // 获取书籍的划线记录
   public async getBookmarkList(bookId: string): Promise<any[]> {
     await this.ensureInitialized();
     return this.retry(async () => {
-      console.error(`正在获取书籍书签: ${bookId}`);
+      console.error(`正在获取书籍划线: ${bookId}`);
       
       const data = await this.makeApiRequest<any>(WEREAD_BOOKMARKLIST_URL, "get", { bookId });
       
-      const bookmarks = data.updated || [];
-      console.error(`获取书籍书签成功，共有${bookmarks.length}条书签`);
+      // 确保我们只处理updated字段，这是我们需要的划线数组
+      let bookmarks = data.updated || [];
+      
+      // 打印一些调试信息
+      if (bookmarks.length > 0) {
+        console.error(`划线原始数据示例:`, JSON.stringify(bookmarks[0]));
+      }
+      
+      // 确保每个划线对象格式一致
+      bookmarks = bookmarks.filter((mark: any) => mark.markText && mark.chapterUid);
+      
+      console.error(`获取书籍划线成功，共有${bookmarks.length}条划线`);
       return bookmarks;
     });
   }
 
+  // 获取阅读进度
   public async getReadInfo(bookId: string): Promise<any> {
     await this.ensureInitialized();
     return this.retry(async () => {
-      console.error(`正在获取阅读信息: ${bookId}`);
+      console.error(`正在获取阅读进度: ${bookId}`);
       
-      // 这个API需要特殊的请求头
-      const headers = {
-        ...this.getApiHeaders(),
-        'baseapi': '32',
-        'appver': '8.2.5.10163885',
-        'basever': '8.2.5.10163885',
-        'osver': '12',
-        'User-Agent': 'WeRead/8.2.5 WRBrand/xiaomi Dalvik/2.1.0 (Linux; U; Android 12; Redmi Note 7 Pro Build/SQ3A.220705.004)'
-      };
+      const data = await this.makeApiRequest<any>(WEREAD_READ_INFO_URL, "get", { bookId });
       
-      // 不再访问主页
-      // await this.visitHomepage();
-      
-      const params = {
-        noteCount: 1,
-        readingDetail: 1,
-        finishedBookIndex: 1,
-        readingBookCount: 1,
-        readingBookIndex: 1,
-        finishedBookCount: 1,
-        bookId,
-        finishedDate: 1,
-        _: new Date().getTime()
-      };
-      
-      const response = await axios.get(WEREAD_READ_INFO_URL, {
-        headers,
-        params,
-        timeout: 30000
-      });
-      
-      console.error(`获取阅读信息成功: ${bookId}`);
-      return response.data;
+      console.error(`获取阅读进度成功: ${bookId}`);
+      return data;
     });
   }
 
+  // 获取笔记/想法列表
   public async getReviewList(bookId: string): Promise<any[]> {
     await this.ensureInitialized();
     return this.retry(async () => {
-      console.error(`正在获取书评列表: ${bookId}`);
+      console.error(`正在获取笔记列表: ${bookId}`);
       
       const data = await this.makeApiRequest<any>(WEREAD_REVIEW_LIST_URL, "get", {
         bookId,
@@ -392,9 +429,10 @@ export class WeReadApi {
       });
       
       let reviews = data.reviews || [];
+      // 转换成正确的格式
       reviews = reviews.map((x: any) => x.review);
       
-      // Add chapterUid for book reviews
+      // 为书评添加chapterUid
       reviews = reviews.map((x: any) => {
         if (x.type === 4) {
           return { chapterUid: 1000000, ...x };
@@ -402,63 +440,80 @@ export class WeReadApi {
         return x;
       });
       
-      console.error(`获取书评列表成功，共有${reviews.length}条评论`);
+      console.error(`获取笔记列表成功，共有${reviews.length}条笔记`);
       return reviews;
     });
   }
 
-  public async getApiData(): Promise<any> {
-    await this.ensureInitialized();
-    try {
-      console.error("正在获取历史数据...");
-      
-      const data = await this.makeApiRequest<any>(WEREAD_HISTORY_URL);
-      
-      console.error("获取历史数据成功");
-      return data;
-    } catch (error) {
-      console.error("获取历史数据失败:", error);
-      throw error;
-    }
-  }
-
+  // 获取章节信息
   public async getChapterInfo(bookId: string): Promise<Record<string, ChapterInfo>> {
     await this.ensureInitialized();
     return this.retry(async () => {
       console.error(`正在获取章节信息: ${bookId}`);
       
-      const body = {
-        bookIds: [bookId],
-        synckeys: [0],
-        teenmode: 0
-      };
-      
-      const data = await this.makeApiRequest<any>(WEREAD_CHAPTER_INFO, "post", {}, body);
-      
-      if (data.data && data.data.length === 1 && data.data[0].updated) {
-        const update = data.data[0].updated;
-        update.push({
-          chapterUid: 1000000,
-          chapterIdx: 1000000,
-          updateTime: 1683825006,
-          readAhead: 0,
-          title: "点评",
-          level: 1
-        });
+      try {
+        // 1. 首先访问主页，确保会话有效
+        await this.visitHomepage();
         
-        const result = update.reduce((acc: Record<string, ChapterInfo>, curr: ChapterInfo) => {
-          acc[curr.chapterUid.toString()] = curr;
-          return acc;
-        }, {});
+        // 2. 获取笔记本列表，进一步初始化会话
+        await this.getNotebooklist();
         
-        console.error(`获取章节信息成功，共有${update.length}个章节`);
-        return result;
-      } else {
-        throw new Error(`获取章节信息失败: ${JSON.stringify(data)}`);
+        // 3. 添加随机延迟，模拟真实用户行为
+        const delay = 1000 + Math.floor(Math.random() * 2000);
+        console.error(`等待${delay}毫秒...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // 4. 请求章节信息
+        console.error(`正在请求书籍${bookId}的章节信息...`);
+        const body = {
+          bookIds: [bookId]
+        };
+        
+        // 添加随机参数避免缓存
+        const params: Record<string, any> = {
+          _: new Date().getTime(),
+          r: Math.random().toString().substring(2, 8)
+        };
+        
+        const data = await this.makeApiRequest<any>(WEREAD_CHAPTER_INFO_URL, "post", params, body);
+        
+        // 5. 处理结果
+        if (data.data && data.data.length === 1 && data.data[0].updated) {
+          const update = data.data[0].updated;
+          // 添加点评章节
+          update.push({
+            chapterUid: 1000000,
+            chapterIdx: 1000000,
+            updateTime: 1683825006,
+            readAhead: 0,
+            title: "点评",
+            level: 1
+          });
+          
+          // 确保chapterUid始终以字符串形式作为键
+          const result = update.reduce((acc: Record<string, ChapterInfo>, curr: ChapterInfo) => {
+            // 显式转换为字符串
+            const chapterUidStr = String(curr.chapterUid);
+            acc[chapterUidStr] = curr;
+            return acc;
+          }, {});
+          
+          console.error(`获取章节信息成功，共有${update.length}个章节`);
+          return result;
+        } else if (data.errCode) {
+          this.handleErrcode(data.errCode);
+          throw new Error(`API返回错误: ${data.errMsg || 'Unknown error'} (code: ${data.errCode})`);
+        } else {
+          throw new Error(`获取章节信息失败，返回格式不符合预期: ${JSON.stringify(data)}`);
+        }
+      } catch (error: any) {
+        console.error(`获取章节信息失败:`, error.message);
+        throw error;
       }
     });
   }
 
+  // 计算书籍URL的ID
   private transformId(bookId: string): [string, string[]] {
     const idLength = bookId.length;
     
@@ -477,6 +532,7 @@ export class WeReadApi {
     return ["4", [result]];
   }
 
+  // 计算书籍URL
   public calculateBookStrId(bookId: string): string {
     const md5 = crypto.createHash('md5');
     md5.update(bookId);
@@ -510,6 +566,7 @@ export class WeReadApi {
     return result;
   }
 
+  // 获取书籍URL
   public getUrl(bookId: string): string {
     return `https://weread.qq.com/web/reader/${this.calculateBookStrId(bookId)}`;
   }
@@ -526,17 +583,10 @@ export class WeReadApi {
     // 获取评论
     const reviews = await this.getReviewList(bookId);
     
-    // 获取书籍章节信息中的synckey
-    const chapterData = await this.makeApiRequest<any>(WEREAD_CHAPTER_INFO, "post", {}, {
-      bookIds: [bookId],
-      synckeys: [0],
-      teenmode: 0
-    });
-    
-    // 提取synckey
+    // 从书签数据中提取synckey
     let synckey = 0;
-    if (chapterData.data && chapterData.data.length > 0) {
-      synckey = chapterData.data[0].synckey || 0;
+    if (bookmarks && bookmarks.length > 0) {
+      synckey = bookmarks[0]?.bookmarks?.synckey || 0;
     }
     
     return { synckey, bookmarks, reviews };
