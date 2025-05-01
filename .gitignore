@@ -1,4 +1,7 @@
 node_modules/
 build/
 *.log
-.env*
+.env
+*.py
+.cacle/*
+.cache
