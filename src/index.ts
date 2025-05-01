@@ -272,19 +272,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const includeChapters = Boolean(request.params.arguments?.include_chapters !== false);
         const organizeByChapter = Boolean(request.params.arguments?.organize_by_chapter !== false);
         
-        // 检查参数中的highlight_style
-        console.error(`原始highlight_style参数:`, request.params.arguments?.highlight_style);
-        console.error(`highlight_style的类型: ${typeof request.params.arguments?.highlight_style}`);
-        
-        // 这里可能存在问题，重写highlight_style解析逻辑
+        // 解析highlight_style参数
         let highlightStyle = null;
         if (request.params.arguments?.highlight_style !== undefined &&
             request.params.arguments?.highlight_style !== null) {
           highlightStyle = Number(request.params.arguments.highlight_style);
-          console.error(`解析后的highlightStyle: ${highlightStyle}, 类型: ${typeof highlightStyle}`);
         }
-        
-        console.error(`处理参数: include_chapters=${includeChapters}, organize_by_chapter=${organizeByChapter}, highlight_style=${highlightStyle}`);
         
         if (!bookId) {
           throw new Error("书籍ID不能为空");
@@ -297,21 +290,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // 2. 获取章节信息
         const chapterInfo = await wereadApi.getChapterInfo(bookId);
         
-        // 检查章节信息格式
-        console.error("章节信息格式示例:");
-        if (Object.keys(chapterInfo).length > 0) {
-          const sampleKey = Object.keys(chapterInfo)[0];
-          console.error(`键示例: "${sampleKey}" (类型: ${typeof sampleKey})`);
-          console.error(`值示例: ${JSON.stringify(chapterInfo[sampleKey])}`);
-        }
-        
-        // 检查chapterInfo的结构
-        console.error("章节信息对象结构:");
-        console.error(`- 类型: ${typeof chapterInfo}`);
-        console.error(`- 键数量: ${Object.keys(chapterInfo).length}`); 
-        console.error(`- 键类型检查: ${Object.keys(chapterInfo).slice(0, 3).map(k => typeof k).join(', ')}`);
-        console.error(`- 键示例: ${Object.keys(chapterInfo).slice(0, 3).join(', ')}`);
-        
         // 3. 获取划线数据
         const bookmarkResponse = await wereadApi.getBookmarkList(bookId);
         
@@ -322,18 +300,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         // 4. 获取笔记列表
         const reviews = await wereadApi.getReviewList(bookId);
-        
-        // 5. 打印日志以便调试
-        console.error(`书籍 ${bookId} (${bookTitle}) 中的划线数量: ${highlights.length}`);
-        console.error(`书籍 ${bookId} (${bookTitle}) 中的笔记数量: ${reviews.length}`);
-        
-        // 统计各种样式的划线
-        const styleStats: Record<string, number> = {};
-        highlights.forEach((h: any) => {
-          const style = h.colorStyle !== undefined ? h.colorStyle : h.style;
-          styleStats[style] = (styleStats[style] || 0) + 1;
-        });
-        console.error(`划线样式统计:`, styleStats);
         
         // 组织数据结构
         const result: any = {
@@ -362,12 +328,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           
           // 将API返回的章节信息转换为我们需要的格式
           const originalChapters = Object.values(chapterInfo);
-          console.error(`从API获取了 ${originalChapters.length} 个章节`);
-          
-          // 输出几个章节示例，检查它们的结构
-          if (originalChapters.length > 0) {
-            console.error("章节示例:", JSON.stringify(originalChapters.slice(0, 2)));
-          }
           
           // 创建基本章节对象 - 简化结构，不保留index和level字段
           originalChapters.forEach((chapter: any) => {
@@ -384,30 +344,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               notes: []
             };
           });
-          
-          // 输出章节映射中的键，用于调试
-          console.error("章节映射中的所有键:", Object.keys(chapterMap));
-          
-          // 在进入循环前先做直接测试
-          console.error("======直接测试划线匹配======");
-          if (highlights.length > 0) {
-            const testHighlight = highlights[0];
-            const testUid = String(testHighlight.chapterUid);
-            console.error(`测试划线的chapterUid: ${testUid}`);
-            console.error(`该UID在chapterMap中: ${testUid in chapterMap}`);
-            console.error(`chapterMap中的键类型: ${typeof Object.keys(chapterMap)[0]}`);
-            console.error(`直接访问结果: ${chapterMap[testUid] ? '成功' : '失败'}`);
-            
-            // 强制检查所有划线的chapterUid是否在映射中
-            const presentCount = highlights.filter((h: any) => String(h.chapterUid) in chapterMap).length;
-            console.error(`${highlights.length}条划线中有${presentCount}条的chapterUid在映射中存在`);
-            
-            // 查看章节的具体结构
-            console.error(`章节信息详情:`);
-            for (const key of Object.keys(chapterMap).slice(0, 3)) {
-              console.error(`- 键 ${key}: ${JSON.stringify(chapterMap[key])}`);
-            }
-          }
           
           // 第二步：构建章节层级关系
           const rootChapters: any[] = [];
@@ -462,37 +398,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           result.chapters = rootChapters;
           
           // 第三步：处理划线数据 - 根据chapterUid分配到对应章节
-          console.error("开始处理划线数据...");
           let highlightsAddedCount = 0;
           let uncategorizedCount = 0;
           
-          highlights.forEach((highlight: any, index: number) => {
-            if (index < 3) {
-              console.error(`划线示例 ${index+1}:`, JSON.stringify(highlight));
-            }
-            
+          highlights.forEach((highlight: any) => {
             // 确保所有必要的字段都存在
             if (!highlight.markText) {
-              console.error("跳过无效的划线数据 (无markText):", highlight);
               return;
             }
             
             const chapterUid = highlight.chapterUid;
             if (!chapterUid) {
-              console.error("跳过无效的划线数据 (无chapterUid):", highlight);
               return;
             }
             
             if (highlightStyle !== null && highlight.colorStyle !== highlightStyle) {
-              if (index < 5) {
-                console.error(`跳过划线样式不匹配: highlight.colorStyle=${highlight.colorStyle}, 需要的样式=${highlightStyle}`);
-              }
               return; // 跳过不匹配的划线样式
-            }
-            
-            // 检查style和colorStyle字段
-            if (index < 5) {
-              console.error(`划线 ${index+1} style=${highlight.style}, colorStyle=${highlight.colorStyle}`);
             }
             
             const highlightData = {
@@ -503,64 +424,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             
             // 查找对应章节 - 直接以字符串形式查找
             const chapterUidStr = String(chapterUid);
-            
-            // 添加调试信息
-            if (index < 10) {
-              console.error(`划线 ${index+1} 章节UID: ${chapterUidStr}, 类型: ${typeof chapterUidStr}`);
-              console.error(`章节映射中的键:`, Object.keys(chapterMap).slice(0, 5));
-              console.error(`该UID在章节映射中: ${chapterUidStr in chapterMap}`);
-              
-              // 直接检查是否可以访问chapterMap
-              if (chapterMap[chapterUidStr]) {
-                console.error(`能够直接访问chapterMap["${chapterUidStr}"]，其title为: ${chapterMap[chapterUidStr].title}`);
-              } else {
-                console.error(`无法访问chapterMap["${chapterUidStr}"]`);
-                
-                // 尝试手动匹配，逐个检查
-                let found = false;
-                Object.keys(chapterMap).forEach(key => {
-                  if (String(key) === String(chapterUid)) {
-                    console.error(`手动匹配发现: ${key} === ${chapterUid}`);
-                    found = true;
-                  }
-                });
-                
-                if (!found) {
-                  console.error(`手动匹配也未发现匹配的章节UID`);
-                }
-              }
-            }
-            
             const chapter = chapterMap[chapterUidStr];
             
             if (chapter) {
               chapter.highlights.push(highlightData);
               highlightsAddedCount++;
-              if (index < 3) {
-                console.error(`划线 ${index+1} 已添加到章节 "${chapter.title}"`);
-              }
             } else {
               result.uncategorized.highlights.push(highlightData);
               uncategorizedCount++;
-              if (index < 3) {
-                console.error(`划线 ${index+1} 找不到对应章节 (UID: ${chapterUidStr})，已添加到未分类区域`);
-              }
             }
           });
-          
-          console.error(`划线处理完成: 成功添加${highlightsAddedCount}条，未分类${uncategorizedCount}条`);
           
           // 第四步：处理笔记数据 - 根据chapterUid分配到对应章节
           reviews.forEach((review: any) => {
             // 确保所有必要的字段都存在
             if (!review.content) {
-              console.error("跳过无效的笔记数据 (无content):", review);
               return;
             }
             
             const chapterUid = review.chapterUid;
             if (!chapterUid) {
-              console.error("跳过无效的笔记数据 (无chapterUid):", review);
               return;
             }
             
@@ -580,15 +463,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               result.uncategorized.notes.push(noteData);
             }
           });
-          
-          // 调试: 输出一些结构信息
-          console.error(`根章节数量: ${rootChapters.length}`);
-          if (rootChapters.length > 0) {
-            console.error(`第一个根章节: title="${rootChapters[0].title}", 子章节数=${rootChapters[0].children.length}`);
-            if (rootChapters[0].children.length > 0) {
-              console.error(`  第一个子章节: title="${rootChapters[0].children[0].title}"`);
-            }
-          }
           
           // 第五步：清理不必要的字段并递归移除空章节
           const cleanAndRemoveEmpty = (chapters: any[]): any[] => {
@@ -612,12 +486,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
           
           result.chapters = cleanAndRemoveEmpty(result.chapters);
-          
-          // 检查最终结果中的章节结构
-          if (result.chapters && result.chapters.length > 0) {
-            console.error("最终结果中的第一个章节结构示例:");
-            console.error(JSON.stringify(result.chapters[0], null, 2).substring(0, 300) + "...");
-          }
         } else if (!organizeByChapter) {
           // 非按章节组织模式
           highlights.forEach((highlight: any) => {
@@ -645,39 +513,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             });
           });
         }
-        
-        // 统计划线和笔记数量
-        let totalHighlightsInChapters = 0;
-        let totalNotesInChapters = 0;
-        
-        // 递归统计
-        const countItems = (chapters: any[]) => {
-          chapters.forEach(chapter => {
-            totalHighlightsInChapters += chapter.highlights?.length || 0;
-            totalNotesInChapters += chapter.notes?.length || 0;
-            
-            if (chapter.children && chapter.children.length > 0) {
-              countItems(chapter.children);
-            }
-          });
-        };
-        
-        if (result.chapters) {
-          countItems(result.chapters);
-        }
-        
-        if (result.uncategorized) {
-          totalHighlightsInChapters += result.uncategorized.highlights?.length || 0;
-          totalNotesInChapters += result.uncategorized.notes?.length || 0;
-        }
-        
-        if (!organizeByChapter) {
-          totalHighlightsInChapters = result.highlights?.length || 0;
-          totalNotesInChapters = result.notes?.length || 0;
-        }
-        
-        console.error(`划线统计: API返回${highlights.length}条，结果包含${totalHighlightsInChapters}条`);
-        console.error(`笔记统计: API返回${reviews.length}条，结果包含${totalNotesInChapters}条`);
         
         return {
           content: [{
@@ -742,8 +577,6 @@ function processClaudeArgs(): void {
     const wereadCookie = process.env.WEREAD_COOKIE;
     
     if ((ccUrl && ccId && ccPassword) || wereadCookie) {
-      console.error("[微信读书MCP服务器] 检测到环境变量中的配置信息");
-      
       // 构建命令行参数
       const args: Record<string, string> = {};
       
@@ -755,8 +588,6 @@ function processClaudeArgs(): void {
       // 将环境变量作为命令行参数传递给WeReadApi
       process.argv.push('--args');
       process.argv.push(JSON.stringify(args));
-      
-      console.error("[微信读书MCP服务器] 已将环境变量转换为命令行参数");
     }
   } catch (error) {
     console.error("[微信读书MCP服务器] 处理Claude参数时出错:", error);
