@@ -32,7 +32,23 @@
 - Node.js 16.x 或更高版本
 - 微信读书账号和有效的Cookie
 
-### 安装步骤
+### 安装方式
+
+#### 方式一：通过 npm 安装（推荐）
+
+1. 通过 npm 安装包：
+   ```bash
+   npm install -g mcp-server-weread
+   ```
+
+2. 创建.env文件，添加微信读书Cookie配置（方式同下）
+
+3. 直接运行：
+   ```bash
+   mcp-server-weread
+   ```
+
+#### 方式二：从源码安装
 
 1. 克隆仓库：
    ```bash
@@ -68,42 +84,61 @@
 
 ### 与Claude Desktop集成
 
-有两种方式可以与Claude Desktop集成：
+有多种方式可以与Claude Desktop集成：
 
-#### 方式一：基本集成（需要.env文件配置）
-
-1. 打开Claude Desktop
-2. 进入设置 -> MCP配置
-3. 添加工具，命令行参数为：
-   ```
-   ./node_modules/.bin/mcp-server-weread
-   ```
-4. 保存配置并重启Claude Desktop
-5. 现在可以在对话中使用微信读书的相关功能了
-
-#### 方式二：直接在Claude配置中提供环境变量（推荐）
+#### 方式一：通过 npx 使用（最简单，推荐）
 
 1. 打开Claude Desktop
 2. 进入设置 -> MCP配置
 3. 添加工具，使用以下JSON配置：
    ```json
    {
-     "mcp-server-weread": {
-       "command": "node",
-       "args": [
-         "您的路径/build/index.js"  // 替换为实际路径
-       ],
-       "env": {
-         // 方式1：使用Cookie Cloud（推荐）
-         "CC_URL": "https://cc.chenge.ink",  // Cookie Cloud的URL
-         "CC_ID": "您的ID",                   // Cookie Cloud的ID
-         "CC_PASSWORD": "您的密码"            // Cookie Cloud的密码
-         
-         // 或方式2：直接提供Cookie
-         // "WEREAD_COOKIE": "您的微信读书Cookie"
+     "mcpServers": {
+       "mcp-server-weread": {
+         "command": "npx",
+         "args": ["-y", "mcp-server-weread"],
+         "env": {
+           // 方式1：使用Cookie Cloud（推荐）
+           "CC_URL": "https://cc.chenge.ink",  // Cookie Cloud的URL
+           "CC_ID": "您的ID",                   // Cookie Cloud的ID
+           "CC_PASSWORD": "您的密码"            // Cookie Cloud的密码
+           
+           // 或方式2：直接提供Cookie
+           // "WEREAD_COOKIE": "您的微信读书Cookie"
+         }
        }
      }
    }
+   ```
+
+#### 方式二：全局安装后使用
+
+1. 全局安装包：
+   ```bash
+   npm install -g mcp-server-weread
+   ```
+
+2. 在Claude配置中使用：
+   ```json
+   {
+     "mcpServers": {
+       "mcp-server-weread": {
+         "command": "mcp-server-weread",
+         "env": {
+           // 同上方式配置环境变量
+         }
+       }
+     }
+   }
+   ```
+
+#### 方式三：基本集成（需要.env文件配置）
+
+1. 打开Claude Desktop
+2. 进入设置 -> MCP配置
+3. 添加工具，命令行参数为：
+   ```
+   ./node_modules/.bin/mcp-server-weread
    ```
 4. 保存配置并重启Claude Desktop
 5. 现在可以在对话中使用微信读书的相关功能了

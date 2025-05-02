@@ -1,8 +1,8 @@
 {
   "name": "mcp-server-weread",
-  "version": "0.1.0",
-  "description": "A WeRead MCP Server for seamless integration with Claude Desktop",
-  "private": true,
+  "version": "0.1.1",
+  "description": "A WeRead MCP Server",
+  "private": false,
   "type": "module",
   "bin": {
     "mcp-server-weread": "./build/index.js"
