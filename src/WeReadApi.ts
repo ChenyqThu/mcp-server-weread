@@ -10,8 +10,9 @@ const WEREAD_NOTEBOOKS_URL = "https://weread.qq.com/api/user/notebook";
 const WEREAD_BOOK_INFO_URL = "https://weread.qq.com/api/book/info";
 const WEREAD_BOOKMARKLIST_URL = "https://weread.qq.com/web/book/bookmarklist";
 const WEREAD_CHAPTER_INFO_URL = "https://weread.qq.com/web/book/chapterInfos";
-const WEREAD_REVIEW_LIST_URL = "https://weread.qq.com/api/review/list";
+const WEREAD_REVIEW_LIST_URL = "https://weread.qq.com/web/review/list";
 const WEREAD_READ_INFO_URL = "https://weread.qq.com/web/book/getProgress";
+const WEREAD_SHELF_SYNC_URL = "https://weread.qq.com/web/shelf/sync";
 
 interface ChapterInfo {
   chapterUid: number;
@@ -275,6 +276,14 @@ export class WeReadApi {
     });
   }
 
+  // 获取所有书架书籍信息
+  public async getEntireShelf(): Promise<any> {
+    await this.ensureInitialized();
+    return this.retry(async () => {
+      return await this.makeApiRequest<any>(WEREAD_SHELF_SYNC_URL, "get");
+    });
+  }
+
   // 获取笔记本列表
   public async getNotebooklist(): Promise<any[]> {
     await this.ensureInitialized();
@@ -318,8 +327,10 @@ export class WeReadApi {
     return this.retry(async () => {
       const data = await this.makeApiRequest<any>(WEREAD_REVIEW_LIST_URL, "get", {
         bookId,
-        listType: 11,
-        mine: 1,
+        listType: 4,
+        maxIdx: 0,
+        count: 0,
+        listMode: 2,
         syncKey: 0
       });
       
@@ -354,22 +365,76 @@ export class WeReadApi {
         const delay = 1000 + Math.floor(Math.random() * 2000);
         await new Promise(resolve => setTimeout(resolve, delay));
         
-        // 4. 请求章节信息
-        const body = {
-          bookIds: [bookId]
-        };
+        // 4. 从cookie中提取关键信息
+        let wr_vid = '';
+        let wr_skey = '';
         
-        // 添加随机参数避免缓存
+        // 提取wr_vid和wr_skey
+        const vidMatch = this.cookie.match(/wr_vid=([^;]+)/);
+        const skeyMatch = this.cookie.match(/wr_skey=([^;]+)/);
+        
+        if (vidMatch) wr_vid = vidMatch[1];
+        if (skeyMatch) wr_skey = skeyMatch[1];
+        
+        // 5. 请求章节信息 - 模拟浏览器行为
+        const url = `${WEREAD_CHAPTER_INFO_URL}`;
+        
+        // 添加请求参数
         const params: Record<string, any> = {
-          _: new Date().getTime(),
-          r: Math.random().toString().substring(2, 8)
+          _: new Date().getTime()
         };
         
-        const data = await this.makeApiRequest<any>(WEREAD_CHAPTER_INFO_URL, "post", params, body);
+        // 使用包含更多信息的请求头
+        const headers = {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          'Content-Type': 'application/json;charset=UTF-8',
+          'Accept': 'application/json, text/plain, */*',
+          'Origin': 'https://weread.qq.com',
+          'Referer': `https://weread.qq.com/web/reader/${bookId}`,
+          'Sec-Fetch-Dest': 'empty',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Site': 'same-origin',
+        };
         
-        // 5. 处理结果
+        // 使用正确的请求体格式
+        const body = JSON.stringify({
+          bookIds: [bookId]
+        });
+        
+        // 直接通过axios请求
+        const response = await axios({
+          method: 'post',
+          url: url,
+          params: params,
+          headers: headers,
+          data: body,
+          timeout: 60000
+        });
+        
+        const data = response.data;
+        
+        // 6. 处理结果 - 增加多种可能的响应格式处理
+        let update = null;
+        
+        // 格式1: {data: [{bookId: "xxx", updated: []}]}
         if (data.data && data.data.length === 1 && data.data[0].updated) {
-          const update = data.data[0].updated;
+          update = data.data[0].updated;
+        } 
+        // 格式2: {updated: []}
+        else if (data.updated && Array.isArray(data.updated)) {
+          update = data.updated;
+        }
+        // 格式3: [{bookId: "xxx", updated: []}]
+        else if (Array.isArray(data) && data.length > 0 && data[0].updated) {
+          update = data[0].updated;
+        }
+        // 格式4: 数组本身就是章节列表
+        else if (Array.isArray(data) && data.length > 0 && data[0].chapterUid) {
+          update = data;
+        }
+        
+        if (update) {
           // 添加点评章节
           update.push({
             chapterUid: 1000000,
@@ -392,11 +457,17 @@ export class WeReadApi {
         } else if (data.errCode) {
           this.handleErrcode(data.errCode);
           throw new Error(`API返回错误: ${data.errMsg || 'Unknown error'} (code: ${data.errCode})`);
+        } else if (data.errcode) {
+          this.handleErrcode(data.errcode);
+          throw new Error(`API返回错误: ${data.errmsg || 'Unknown error'} (code: ${data.errcode})`);
         } else {
           throw new Error(`获取章节信息失败，返回格式不符合预期`);
         }
       } catch (error: any) {
         console.error(`获取章节信息失败:`, error.message);
+        if (error.response) {
+          console.error(`状态码: ${error.response.status}`);
+        }
         throw error;
       }
     });

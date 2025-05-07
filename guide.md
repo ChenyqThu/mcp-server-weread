@@ -179,6 +179,7 @@ Get all highlights and notes for a specific book, organized by chapters.
 
 ### 实现逻辑
 1. 调用 `/web/book/chapterInfos` 获取书籍的章节信息
+   - 使用POST方法，并设置正确的请求头和JSON请求体格式
 2. 调用 `/web/book/bookmarklist?bookId={bookId}` 获取书籍的划线记录
 3. 调用 `/api/review/list?bookId={bookId}&listType=11&syncKey=0&mine=1` 获取书籍的笔记记录
 4. 整合划线和笔记信息，按章节顺序组织
