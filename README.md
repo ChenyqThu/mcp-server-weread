@@ -98,7 +98,7 @@ Chrome商店：[CookieCloud for Chrome](https://chromewebstore.google.com/detail
 ### 配置 CookieCloud 插件
 服务器地址：使用默认服务器 https://cc.chenge.ink 或填入自建服务器地址
 点击 "自动生成密码"
-同步域名关键词中填入 "weread.qq.com"
+同步域名关键词中填入 "weread"
 点击"保存" ，然后点击 "手动同步"确保配置生效
 [可选] 如果需要插件自动保活，可以在保活中填入 https://weread.qq.com，插件会自动刷新 Cookie
 

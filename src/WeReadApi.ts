@@ -93,26 +93,84 @@ export class WeReadApi {
       
       if (response.status === 200) {
         const responseData = response.data;
-        const cookieData = responseData.cookie_data;
-        
-        if (cookieData && "weread.qq.com" in cookieData) {
-          const cookieItems = [];
-          for (const key in cookieData["weread.qq.com"]) {
-            const cookie = cookieData["weread.qq.com"][key];
-            cookieItems.push(`${cookie.name}=${cookie.value}`);
+
+        if (responseData.cookie_data) {
+          // 打印所有可用的域名
+          const domains = Object.keys(responseData.cookie_data);
+          
+          // 首先尝试 "weread.qq.com" 域名
+          if ("weread.qq.com" in responseData.cookie_data) {
+            return this.extractCookiesFromDomain(responseData.cookie_data, "weread.qq.com");
           }
           
-          if (cookieItems.length > 0) {
-            return cookieItems.join("; ");
+          // 然后尝试 "weread" 域名
+          if ("weread" in responseData.cookie_data) {
+            
+            // 检查这些Cookie是否真的是weread.qq.com的Cookie
+            const wereadCookies = responseData.cookie_data["weread"];
+            const validWereadCookies = wereadCookies.filter((cookie: any) => 
+              cookie.domain && (cookie.domain === ".weread.qq.com" || cookie.domain === "weread.qq.com")
+            );
+            
+            if (validWereadCookies.length > 0) {
+              const cookieItems = validWereadCookies.map((cookie: any) => `${cookie.name}=${cookie.value}`);
+              return cookieItems.join("; ");
+            } else {
+              console.warn(`[CookieCloud] weread域名下的Cookie不属于微信读书`);
+            }
           }
+          
+          // 最后尝试遍历所有域名，寻找包含weread.qq.com域名的Cookie
+          console.warn(`[CookieCloud] 尝试从所有域名中查找微信读书Cookie`);
+          for (const domain of domains) {
+            const cookiesInDomain = responseData.cookie_data[domain];
+            if (Array.isArray(cookiesInDomain)) {
+              const wereadCookies = cookiesInDomain.filter((cookie: any) => 
+                cookie.domain && (cookie.domain === ".weread.qq.com" || cookie.domain === "weread.qq.com")
+              );
+              
+              if (wereadCookies.length > 0) {
+                console.warn(`[CookieCloud] 在${domain}域名下找到${wereadCookies.length}个微信读书Cookie`);
+                const cookieItems = wereadCookies.map((cookie: any) => `${cookie.name}=${cookie.value}`);
+                return cookieItems.join("; ");
+              }
+            }
+          }
+        } else {
+          console.warn(`[CookieCloud] 响应中没有cookie_data字段`);
         }
       }
-      console.warn("从Cookie Cloud获取数据成功，但未找到微信读书Cookie");
-    } catch (error) {
-      console.error("从Cookie Cloud获取Cookie失败:", error);
+      console.warn("[CookieCloud] 从Cookie Cloud获取数据成功，但未找到微信读书Cookie");
+    } catch (error: any) {
+      console.error("[CookieCloud] 从Cookie Cloud获取Cookie失败:", error.message);
+      if (error.response) {
+        console.error(`[CookieCloud] 响应状态: ${error.response.status}`);
+      }
     }
     
     return null;
+  }
+  
+  // 从指定域名提取Cookie
+  private extractCookiesFromDomain(cookieData: any, domain: string): string | null {
+    const cookies = cookieData[domain];
+    
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      return null;
+    }
+    
+    const cookieItems = [];
+    for (const cookie of cookies) {
+      if (cookie.name && cookie.value) {
+        cookieItems.push(`${cookie.name}=${cookie.value}`);
+      }
+    }
+    
+    if (cookieItems.length === 0) {
+      return null;
+    }
+    
+    return cookieItems.join("; ");
   }
 
   private async getCookie(): Promise<string> {
