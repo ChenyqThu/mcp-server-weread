@@ -119,6 +119,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["book_id"]
         }
       },
+      {
+        name: "get_book_best_reviews",
+        description: "Get popular reviews for a specific book",
+        inputSchema: {
+          type: "object",
+          properties: {
+            book_id: {
+              type: "string",
+              description: "Book ID"
+            },
+            count: {
+              type: "integer",
+              description: "Number of reviews to return",
+              default: 10
+            },
+            max_idx: {
+              type: "integer",
+              description: "Pagination index",
+              default: 0
+            },
+            synckey: {
+              type: "integer",
+              description: "Sync key for pagination",
+              default: 0
+            }
+          },
+          required: ["book_id"]
+        }
+      },
     ]
   };
 });
@@ -728,6 +757,98 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{
             type: "text",
             text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      // 获取书籍热门书评
+      case "get_book_best_reviews": {
+        const bookId = String(request.params.arguments?.book_id || "");
+        const count = Number(request.params.arguments?.count || 10);
+        const maxIdx = Number(request.params.arguments?.max_idx || 0);
+        const synckey = Number(request.params.arguments?.synckey || 0);
+        
+        if (!bookId) {
+          throw new Error("书籍ID不能为空");
+        }
+        
+        // 1. 获取书籍信息
+        const bookInfo = await wereadApi.getBookinfo(bookId);
+        
+        // 2. 获取热门书评
+        const bestReviewsData = await wereadApi.getBestReviews(bookId, count, maxIdx, synckey);
+        
+        // 控制台打印原始返回数据，方便调试
+        // console.error("热门书评原始数据:", JSON.stringify(bestReviewsData, null, 2));
+        
+        // 3. 提取基础数据
+        const hasMore = bestReviewsData.reviewsHasMore || false;
+        const syncKey = bestReviewsData.synckey || 0;
+        const totalCount = bestReviewsData.reviewsCnt || 0;
+        
+        // 4. 处理每条书评 - 根据接口确切的数据结构
+        let processedReviews: any[] = [];
+        
+        if (bestReviewsData.reviews && Array.isArray(bestReviewsData.reviews)) {
+          processedReviews = bestReviewsData.reviews
+            .filter((item: any) => {
+              return item && item.review && item.review.review;
+            })
+            .map((item: any) => {
+              const reviewContainer = item.review; // {reviewId, review}
+              const review = reviewContainer.review; // 实际评论内容
+              const author = review.author || {};
+              
+              // 仅处理有内容的评论
+              if (!review.content && !review.htmlContent) {
+                return null;
+              }
+              
+              // 处理评分 - 实际返回示例中用star表示评分(0-100)
+              let rating = 0;
+              if (review.star) {
+                rating = review.star / 20; // 转换为5分制
+              } else if (review.newRatingLevel) {
+                // 有些评论用newRatingLevel表示评分级别
+                switch(review.newRatingLevel) {
+                  case 1: rating = 5; break; // "好看"
+                  case 2: rating = 3; break; // "一般"
+                  case 3: rating = 1; break; // "不行"
+                  default: rating = 0;
+                }
+              }
+              
+              // 构建评论对象
+              return {
+                review_id: reviewContainer.reviewId || "",
+                content: review.content || review.htmlContent || "",
+                rating: rating,
+                likes: review.liked || reviewContainer.likesCount || 0,
+                comments: review.comments || 0,
+                created_time: review.createTime ? new Date(review.createTime * 1000).toISOString() : "",
+                //user_id: author.userVid || "",
+                author_nickname: author.name || "",
+                //avatar_url: author.avatar || ""
+                is_spoiler: !!review.notVisibleToFriends,
+                is_top: item.idx === 1 || !!item.isTop // 置顶评论判断
+              };
+            })
+            .filter(Boolean); // 过滤掉null值
+        }
+        
+        // 5. 返回结果
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              book_id: bookId,
+              book_title: bookInfo.title || "",
+              book_author: bookInfo.author || "",
+              total_reviews: totalCount,
+              has_more: hasMore,
+              sync_key: syncKey,
+              reviews: processedReviews
+            }, null, 2)
           }]
         };
       }

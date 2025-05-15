@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-weread",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "A WeRead MCP Server",
   "private": false,
   "type": "module",

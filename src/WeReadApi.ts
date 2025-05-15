@@ -13,6 +13,7 @@ const WEREAD_CHAPTER_INFO_URL = "https://weread.qq.com/web/book/chapterInfos";
 const WEREAD_REVIEW_LIST_URL = "https://weread.qq.com/web/review/list";
 const WEREAD_READ_INFO_URL = "https://weread.qq.com/web/book/getProgress";
 const WEREAD_SHELF_SYNC_URL = "https://weread.qq.com/web/shelf/sync";
+const WEREAD_BEST_REVIEW_URL = "https://weread.qq.com/web/review/list/best";
 
 interface ChapterInfo {
   chapterUid: number;
@@ -405,6 +406,21 @@ export class WeReadApi {
       });
       
       return reviews;
+    });
+  }
+
+  // 获取热门书评
+  public async getBestReviews(bookId: string, count: number = 10, maxIdx: number = 0, synckey: number = 0): Promise<any> {
+    await this.ensureInitialized();
+    return this.retry(async () => {
+      const data = await this.makeApiRequest<any>(WEREAD_BEST_REVIEW_URL, "get", {
+        bookId,
+        synckey,
+        maxIdx,
+        count
+      });
+      
+      return data;
     });
   }
 
